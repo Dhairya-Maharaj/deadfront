@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>DeadFront - Hybrid Universal Controls</title>
+  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+  <style>
+    body { margin: 0; overflow: hidden; font-family: monospace; background: #e3ded2; }
+    #overlay {
+      position: absolute; top: 12px; left: 12px; z-index: 1000;
+      color: #1a2228; text-shadow: 0 0 4px #ffffff;
+      pointer-events: none; font-size: 13px; line-height: 1.4;
+    }
+    #hud-info {
+      background: rgba(255, 255, 255, 0.7);
+      padding: 6px 10px;
+      border-radius: 4px;
+      display: inline-block;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="overlay">
+    <div id="hud-info">
+      <div><strong>UNIVERSAL HYBRID CONTROLS:</strong></div>
+      <div>• <strong>Shoot:</strong> Left Click | RT/R2 | A | VR Trigger</div>
+      <div>• <strong>Switch Gun:</strong> 'E' / 'Q' | LT/L2 | X | VR Grip</div>
+      <div>• <strong>Move:</strong> WASD Keys | Left Thumbstick</div>
+      <div>• <strong>Aim:</strong> Mouse | Right Thumbstick | VR Hands</div>
+      <div>• <strong>Restart:</strong> 'R' | Y/Triangle | In-Game Button</div>
+      <div>• <strong>Pause:</strong> 'P' / Esc | Start/Options</div>
+    </div>
+  </div>
+
+  <script>
+    // --- PROCEDURAL AUDIO SFX ---
+    const AudioEngine = {
+      ctx: null,
+      init() {
+        if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      },
+      playRifle() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.connect(gain); gain.connect(this.ctx.destination);
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(380, now);
+        osc.frequency.exponentialRampToValueAtTime(45, now + 0.11);
+        gain.gain.setValueAtTime(0.35, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.11);
+        osc.start(now); osc.stop(now + 0.11);
+      },
+      playShotgun() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const buffer = this.ctx.createBuffer(1, 4096, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < 4096; i++) data[i] = Math.random() * 2 - 1;
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(1100, now);
+        filter.frequency.exponentialRampToValueAtTime(40, now + 0.3);
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0.65, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
+        noise.connect(filter); filter.connect(gain); gain.connect(this.ctx.destination);
+        noise.start(now); noise.stop(now + 0.3);
+      },
+      playPlayerHurt() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.connect(gain); gain.connect(this.ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.exponentialRampToValueAtTime(30, now + 0.25);
+        gain.gain.setValueAtTime(0.5, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.25);
+        osc.start(now); osc.stop(now + 0.25);
+      },
+      playGroan() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.connect(gain); gain.connect(this.ctx.destination);
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(115 + Math.random() * 20, now);
+        osc.frequency.linearRampToValueAtTime(70, now + 0.3);
+        gain.gain.setValueAtTime(0.22, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
+        osc.start(now); osc.stop(now + 0.3);
+      },
+      playDeathGasp() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.connect(gain); gain.connect(this.ctx.destination);
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(140, now);
+        osc.frequency.exponentialRampToValueAtTime(25, now + 0.45);
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.45);
+        osc.start(now); osc.stop(now + 0.45);
+      },
+      playSplatter() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.connect(gain); gain.connect(this.ctx.destination);
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(170, now);
+        osc.frequency.exponentialRampToValueAtTime(20, now + 0.22);
+        gain.gain.setValueAtTime(0.35, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.22);
+        osc.start(now); osc.stop(now + 0.22);
+      },
+      playMultiplier() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.connect(gain); gain.connect(this.ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(520, now);
+        osc.frequency.exponentialRampToValueAtTime(1040, now + 0.15);
+        gain.gain.setValueAtTime(0.25, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.15);
+        osc.start(now); osc.stop(now + 0.15);
+      },
+      playRestart() {
+        if (!this.ctx) return;
+        [440, 554.37, 659.25, 880].forEach((freq, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.connect(gain); gain.connect(this.ctx.destination);
+          const t = this.ctx.currentTime + (idx * 0.06);
+          osc.frequency.setValueAtTime(freq, t);
+          gain.gain.setValueAtTime(0.25, t);
+          gain.gain.linearRampToValueAtTime(0.01, t + 0.15);
+          osc.start(t); osc.stop(t + 0.15);
+        });
+      }
+    };
+
+    // --- GAME MANAGER ---
+    AFRAME.registerComponent('game-manager', {
+      schema: {
+        score: { type: 'int', default: 0 },
+        kills: { type: 'int', default: 0 },
+        wave: { type: 'int', default: 1 },
+        multiplier: { type: 'int', default: 1 },
+        playerHp: { type: 'int', default: 100 },
+        maxPlayerHp: { type: 'int', default: 100 },
+        isPaused: { type: 'boolean', default: false },
+        isGameOver: { type: 'boolean', default: false }
+      },
+      init() {
+        this.currentWeapon = 'rifle';
+        this.weapons = {
+          rifle: { name: 'Titan AR-15', cal: '5.56 NATO', damage: 38, fireRate: 140, sightColor: '#00ccff' },
+          shotgun: { name: 'Vanguard 12G', cal: '12-Gauge', damage: 130, fireRate: 600, sightColor: '#ff9900' }
+        };
+        this.lastFireTime = 0;
+        this.comboStreak = 0;
+        this.lastKillTime = 0;
+        this.activeSpawnTimeouts = [];
+        this.isInVR = false;
+
+        // Mouse click shooting
+        window.addEventListener('mousedown', (e) => {
+          AudioEngine.init();
+          if (e.target.classList && e.target.classList.contains('clickable')) return;
+          if (!this.data.isPaused && !this.data.isGameOver && e.button === 0) {
+            this.shoot();
+          }
+        });
+
+        // Keyboard commands
+        window.addEventListener('keydown', (e) => {
+          AudioEngine.init();
+          if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') this.togglePause();
+          if (e.key === 'e' || e.key === 'E' || e.key === 'q' || e.key === 'Q') this.switchWeapon();
+          if (e.key === 'r' || e.key === 'R') this.restartGame();
+          if (e.code === 'Space' && !this.data.isPaused && !this.data.isGameOver) this.shoot();
+        });
+
+        this.el.sceneEl.addEventListener('enter-vr', () => {
+          this.isInVR = true;
+          AudioEngine.init();
+          const dGun = document.querySelector('#desktop-gun');
+          if (dGun) dGun.setAttribute('visible', 'false');
+          const vrGun = document.querySelector('#vr-gun');
+          if (vrGun) vrGun.setAttribute('visible', 'true');
+        });
+
+        this.el.sceneEl.addEventListener('exit-vr', () => {
+          this.isInVR = false;
+          const dGun = document.querySelector('#desktop-gun');
+          if (dGun) dGun.setAttribute('visible', 'true');
+          const vrGun = document.querySelector('#vr-gun');
+          if (vrGun) vrGun.setAttribute('visible', 'false');
+        });
+
+        this.updateHUD();
+        this.startWave(1);
+      },
+
+      restartGame() {
+        AudioEngine.init();
+        AudioEngine.playRestart();
+
+        this.activeSpawnTimeouts.forEach(t => clearTimeout(t));
+        this.activeSpawnTimeouts = [];
+
+        document.querySelectorAll('[zombie-ai]').forEach(z => z.remove());
+
+        this.data.score = 0;
+        this.data.kills = 0;
+        this.data.wave = 1;
+        this.data.multiplier = 1;
+        this.data.playerHp = this.data.maxPlayerHp;
+        this.data.isPaused = false;
+        this.data.isGameOver = false;
+        this.comboStreak = 0;
+
+        const rig = document.querySelector('#player-rig');
+        if (rig) rig.object3D.position.set(0, 0, 0);
+
+        const pauseScreen = document.querySelector('#pause-screen');
+        if (pauseScreen) pauseScreen.setAttribute('visible', 'false');
+        const overScreen = document.querySelector('#gameover-screen');
+        if (overScreen) overScreen.setAttribute('visible', 'false');
+        const dmg = document.querySelector('#damage-vignette');
+        if (dmg) dmg.setAttribute('visible', 'false');
+
+        this.updateHUD();
+        this.startWave(1);
+      },
+
+      tick(t, dt) {
+        if (!dt) return;
+        if (this.data.multiplier > 1 && (performance.now() - this.lastKillTime > 3500)) {
+          this.data.multiplier = 1;
+          this.comboStreak = 0;
+          this.updateHUD();
+        }
+      },
+
+      togglePause() {
+        if (this.data.isGameOver) return;
+        this.data.isPaused = !this.data.isPaused;
+        const pauseScreen = document.querySelector('#pause-screen');
+        if (pauseScreen) pauseScreen.setAttribute('visible', this.data.isPaused);
+      },
+
+      switchWeapon() {
+        this.currentWeapon = (this.currentWeapon === 'rifle') ? 'shotgun' : 'rifle';
+        this.updateHUD();
+        const reticles = document.querySelectorAll('.holo-reticle');
+        reticles.forEach(r => r.setAttribute('material', 'color', this.weapons[this.currentWeapon].sightColor));
+      },
+
+      shoot() {
+        const now = performance.now();
+        const wpn = this.weapons[this.currentWeapon];
+        if (now - this.lastFireTime < wpn.fireRate) return;
+        this.lastFireTime = now;
+
+        AudioEngine.init();
+        if (this.currentWeapon === 'rifle') AudioEngine.playRifle();
+        else AudioEngine.playShotgun();
+
+        const flashes = document.querySelectorAll('.muzzle-flash');
+        flashes.forEach(f => {
+          f.setAttribute('visible', 'true');
+          setTimeout(() => f.setAttribute('visible', 'false'), 40);
+        });
+
+        const dir = new THREE.Vector3();
+        const startPos = new THREE.Vector3();
+
+        if (this.isInVR) {
+          const rightHand = document.querySelector('#rightHand');
+          rightHand.object3D.getWorldPosition(startPos);
+          rightHand.object3D.getWorldDirection(dir);
+          dir.multiplyScalar(-1);
+          startPos.addScaledVector(dir, 0.4);
+        } else {
+          const cam = document.querySelector('#head-camera');
+          cam.object3D.getWorldDirection(dir).multiplyScalar(-1);
+          cam.object3D.getWorldPosition(startPos);
+          startPos.addScaledVector(dir, 0.45);
+          startPos.y -= 0.12;
+        }
+
+        const proj = document.createElement('a-cylinder');
+        proj.setAttribute('height', '0.5');
+        proj.setAttribute('radius', '0.02');
+        proj.setAttribute('rotation', '90 0 0');
+        proj.setAttribute('material', 'color: #ffaa00; emissive: #ff8800; emissiveIntensity: 2; shader: flat;');
+        proj.setAttribute('position', `${startPos.x} ${startPos.y} ${startPos.z}`);
+        proj.setAttribute('bullet-entity', {
+          dirX: dir.x, dirY: dir.y, dirZ: dir.z,
+          speed: 48,
+          damage: wpn.damage
+        });
+        this.el.sceneEl.appendChild(proj);
+      },
+
+      damagePlayer(amount) {
+        if (this.data.isGameOver) return;
+        this.data.playerHp = Math.max(0, this.data.playerHp - amount);
+        this.data.multiplier = 1;
+        this.comboStreak = 0;
+        AudioEngine.playPlayerHurt();
+        this.updateHUD();
+
+        const vignette = document.querySelector('#damage-vignette');
+        if (vignette) {
+          vignette.setAttribute('visible', 'true');
+          setTimeout(() => vignette.setAttribute('visible', 'false'), 120);
+        }
+
+        if (this.data.playerHp <= 0) this.gameOver();
+      },
+
+      gameOver() {
+        this.data.isGameOver = true;
+        const overScreen = document.querySelector('#gameover-screen');
+        if (overScreen) overScreen.setAttribute('visible', 'true');
+      },
+
+      startWave(num) {
+        this.data.wave = num;
+        this.updateHUD();
+
+        const count = 4 + (num * 3);
+        const spawnDelay = Math.max(500, 1300 - (num * 80));
+
+        for (let i = 0; i < count; i++) {
+          const tId = setTimeout(() => {
+            if (!this.data.isPaused && !this.data.isGameOver) this.spawnZombie();
+          }, i * spawnDelay);
+          this.activeSpawnTimeouts.push(tId);
+        }
+      },
+
+      spawnZombie() {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 19 + Math.random() * 5;
+        const x = Math.cos(angle) * dist;
+        const z = Math.sin(angle) * dist;
+
+        const baseSpeed = 0.85 + (this.data.wave * 0.12);
+        const speedVar = (Math.random() * 0.3) + (this.data.wave > 3 && Math.random() < 0.25 ? 0.45 : 0);
+        const baseHp = 70 + (this.data.wave * 25);
+
+        const zombie = document.createElement('a-entity');
+        zombie.setAttribute('position', `${x} 0 ${z}`);
+        zombie.setAttribute('zombie-ai', {
+          hp: baseHp,
+          speed: Math.min(2.1, baseSpeed + speedVar)
+        });
+        this.el.sceneEl.appendChild(zombie);
+      },
+
+      onZombieKilled() {
+        const now = performance.now();
+        if (now - this.lastKillTime < 3500) {
+          this.comboStreak++;
+          if (this.comboStreak >= 6) this.data.multiplier = 4;
+          else if (this.comboStreak >= 3) this.data.multiplier = 3;
+          else if (this.comboStreak >= 1) this.data.multiplier = 2;
+        } else {
+          this.comboStreak = 1;
+          this.data.multiplier = 1;
+        }
+        this.lastKillTime = now;
+
+        if (this.data.multiplier > 1) AudioEngine.playMultiplier();
+
+        this.data.kills += 1;
+        this.data.score += 150 * this.data.multiplier;
+        this.updateHUD();
+
+        const livingZombies = Array.from(document.querySelectorAll('[zombie-ai]')).filter(
+          z => !z.components['zombie-ai'].isDying
+        );
+
+        if (livingZombies.length === 0 && !this.data.isGameOver) {
+          setTimeout(() => this.startWave(this.data.wave + 1), 2400);
+        }
+      },
+
+      updateHUD() {
+        const scoreEl = document.querySelector('#hud-score-val');
+        const killsEl = document.querySelector('#hud-kills-val');
+        const waveEl = document.querySelector('#hud-wave-val');
+        const multEl = document.querySelector('#hud-mult-val');
+        const gunEl = document.querySelector('#hud-gun-val');
+
+        if (scoreEl) scoreEl.setAttribute('value', `${this.data.score.toLocaleString()}`);
+        if (killsEl) killsEl.setAttribute('value', `${this.data.kills}`);
+        if (waveEl) waveEl.setAttribute('value', `0${this.data.wave}`);
+        if (multEl) {
+          multEl.setAttribute('value', `x${this.data.multiplier}`);
+          multEl.setAttribute('color', this.data.multiplier > 1 ? '#ff9900' : '#8899a6');
+        }
+        if (gunEl) {
+          const w = this.weapons[this.currentWeapon];
+          gunEl.setAttribute('value', `${w.name.toUpperCase()} [${w.cal}]`);
+        }
+
+        const fill = document.querySelector('#player-hp-fill');
+        const text = document.querySelector('#player-hp-text');
+        const ratio = Math.max(0, this.data.playerHp / this.data.maxPlayerHp);
+        if (fill) {
+          fill.setAttribute('scale', `${ratio} 1 1`);
+          fill.setAttribute('position', `${-0.25 + (ratio * 0.25)} 0 0.005`);
+          if (ratio > 0.5) fill.setAttribute('material', 'color', '#00b359');
+          else if (ratio > 0.25) fill.setAttribute('material', 'color', '#ff9900');
+          else fill.setAttribute('material', 'color', '#dd2222');
+        }
+        if (text) text.setAttribute('value', `${this.data.playerHp}%`);
+      }
+    });
+
+    // --- GAMEPAD LOOP (Runs in parallel with Keyboard/Mouse & VR) ---
+    AFRAME.registerComponent('laptop-gamepad-controls', {
+      init() {
+        this.prevButtons = {};
+        this.cam = document.querySelector('#head-camera');
+        this.pitch = 0;
+        this.yaw = 0;
+      },
+      tick(t, dt) {
+        if (!dt) return;
+        const delta = dt / 1000;
+        const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+        let pad = null;
+        for (let i = 0; i < gamepads.length; i++) {
+          if (gamepads[i] && gamepads[i].connected) {
+            pad = gamepads[i];
+            break;
+          }
+        }
+        if (!pad) return;
+
+        const gm = document.querySelector('[game-manager]').components['game-manager'];
+
+        const isPressed = (idx) => {
+          const b = pad.buttons[idx];
+          if (!b) return false;
+          return typeof b === 'object' ? b.pressed || b.value > 0.4 : b > 0.4;
+        };
+
+        const justPressed = (idx) => {
+          const curr = isPressed(idx);
+          const prev = !!this.prevButtons[idx];
+          this.prevButtons[idx] = curr;
+          return curr && !prev;
+        };
+
+        // Restart on Y / Triangle (Button 3)
+        if (justPressed(3)) {
+          gm.restartGame();
+          return;
+        }
+
+        // Fire on RT (7) or A (0)
+        if (isPressed(7) || isPressed(0)) {
+          if (!gm.data.isGameOver && !gm.data.isPaused) {
+            gm.shoot();
+            if (pad.vibrationActuator) {
+              pad.vibrationActuator.playEffect('dual-rumble', {
+                duration: 40,
+                strongMagnitude: 0.5,
+                weakMagnitude: 0.8
+              }).catch(() => {});
+            }
+          }
+        }
+
+        // Switch Weapon on LT (6) or X (2)
+        if (justPressed(6) || justPressed(2)) {
+          gm.switchWeapon();
+        }
+
+        // Pause on Start / Options (9)
+        if (justPressed(9)) {
+          gm.togglePause();
+        }
+
+        if (gm.data.isPaused || gm.data.isGameOver) return;
+
+        // Stick Look (Right Thumbstick: Axes 2 & 3)
+        const deadzone = 0.15;
+        let lookX = Math.abs(pad.axes[2]) > deadzone ? pad.axes[2] : 0;
+        let lookY = Math.abs(pad.axes[3]) > deadzone ? pad.axes[3] : 0;
+
+        if (lookX !== 0 || lookY !== 0) {
+          const rotSpeed = 110 * delta;
+          this.yaw -= lookX * rotSpeed;
+          this.pitch = Math.max(-75, Math.min(75, this.pitch - lookY * rotSpeed));
+          this.cam.object3D.rotation.set(
+            THREE.MathUtils.degToRad(this.pitch),
+            THREE.MathUtils.degToRad(this.yaw),
+            0,
+            'YXZ'
+          );
+        }
+
+        // Stick Walk (Left Thumbstick: Axes 0 & 1)
+        let moveX = Math.abs(pad.axes[0]) > deadzone ? pad.axes[0] : 0;
+        let moveZ = Math.abs(pad.axes[1]) > deadzone ? pad.axes[1] : 0;
+
+        if (moveX !== 0 || moveZ !== 0) {
+          const rig = document.querySelector('#player-rig').object3D;
+          const speed = 4.5 * delta;
+          const forward = new THREE.Vector3();
+          this.cam.object3D.getWorldDirection(forward);
+          forward.y = 0;
+          forward.normalize();
+
+          const side = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), forward).normalize();
+          rig.position.addScaledVector(forward, -moveZ * speed);
+          rig.position.addScaledVector(side, -moveX * speed);
+
+          rig.position.x = Math.max(-18, Math.min(18, rig.position.x));
+          rig.position.z = Math.max(-18, Math.min(18, rig.position.z));
+        }
+      }
+    });
+
+    // --- VR MOTION CONTROLLER INPUT ---
+    AFRAME.registerComponent('vr-controller-input', {
+      schema: { hand: { type: 'string', default: 'right' } },
+      init() {
+        const el = this.el;
+        const gm = () => document.querySelector('[game-manager]').components['game-manager'];
+
+        ['triggerdown', 'selectstart'].forEach(evt => {
+          el.addEventListener(evt, () => {
+            AudioEngine.init();
+            gm().shoot();
+          });
+        });
+
+        ['gripdown', 'squeezeend'].forEach(evt => {
+          el.addEventListener(evt, () => gm().switchWeapon());
+        });
+
+        ['abuttondown', 'bbuttondown', 'xbuttondown', 'ybuttondown', 'thumbstickdown', 'menudown'].forEach(evt => {
+          el.addEventListener(evt, () => gm().togglePause());
+        });
+      }
+    });
+
+    // --- BULLET LOGIC ---
+    AFRAME.registerComponent('bullet-entity', {
+      schema: {
+        dirX: { type: 'number' },
+        dirY: { type: 'number' },
+        dirZ: { type: 'number' },
+        speed: { type: 'number', default: 48 },
+        damage: { type: 'number', default: 38 }
+      },
+      init() {
+        this.life = 2.0;
+        this.dir = new THREE.Vector3(this.data.dirX, this.data.dirY, this.data.dirZ).normalize();
+        this.el.object3D.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), this.dir);
+      },
+      tick(t, dt) {
+        if (!dt) return;
+        const delta = dt / 1000;
+        this.life -= delta;
+        if (this.life <= 0) {
+          this.el.remove();
+          return;
+        }
+
+        const move = this.dir.clone().multiplyScalar(this.data.speed * delta);
+        this.el.object3D.position.add(move);
+
+        const zombies = document.querySelectorAll('[zombie-ai]');
+        const bPos = this.el.object3D.position;
+
+        zombies.forEach(z => {
+          const ai = z.components['zombie-ai'];
+          if (ai && !ai.isDying) {
+            const zPos = z.object3D.position;
+            const zCenter = new THREE.Vector3(zPos.x, zPos.y + 1.1, zPos.z);
+            if (bPos.distanceTo(zCenter) < 0.85) {
+              ai.takeHit(this.data.damage);
+              this.el.remove();
+            }
+          }
+        });
+      }
+    });
+
+    // --- ZOMBIE AI ---
+    AFRAME.registerComponent('zombie-ai', {
+      schema: {
+        hp: { type: 'number', default: 75 },
+        speed: { type: 'number', default: 0.9 }
+      },
+      init() {
+        this.maxHp = this.data.hp;
+        this.animTimer = Math.random() * 10;
+        this.attackCooldown = 0;
+        this.isDying = false;
+        this.deathTimer = 0;
+        this.deathPitch = (Math.random() > 0.5 ? 1 : -1) * (1.1 + Math.random() * 0.5);
+        const el = this.el;
+
+        el.innerHTML = `
+          <a-entity class="hp-bar-rig" position="0 2.2 0">
+            <a-plane width="0.7" height="0.08" material="color: #ffffff; shader: flat;"></a-plane>
+            <a-plane class="hp-fill" width="0.66" height="0.06" position="0 0 0.01" material="color: #00aa44; shader: flat;"></a-plane>
+          </a-entity>
+          <a-box class="z-head" position="0 1.65 0" width="0.32" height="0.32" depth="0.32" material="color: #647a61; roughness: 0.85;">
+            <a-sphere position="-0.08 0.06 0.16" radius="0.03" material="color: #cc2200;"></a-sphere>
+            <a-sphere position="0.08 0.06 0.16" radius="0.03" material="color: #cc2200;"></a-sphere>
+          </a-box>
+          <a-box class="z-body" position="0 1.1 0" width="0.48" height="0.65" depth="0.28" material="color: #555f63; roughness: 0.8;"></a-box>
+          <a-entity class="z-arm-l" position="-0.32 1.3 0.15" rotation="75 -15 0">
+            <a-box width="0.12" height="0.55" depth="0.12" material="color: #647a61; roughness: 0.85;"></a-box>
+          </a-entity>
+          <a-entity class="z-arm-r" position="0.32 1.3 0.15" rotation="80 15 0">
+            <a-box width="0.12" height="0.55" depth="0.12" material="color: #647a61; roughness: 0.85;"></a-box>
+          </a-entity>
+          <a-entity class="z-leg-l" position="-0.15 0.45 0">
+            <a-box width="0.15" height="0.75" depth="0.16" material="color: #3b4042; roughness: 0.9;"></a-box>
+          </a-entity>
+          <a-entity class="z-leg-r" position="0.15 0.45 0">
+            <a-box width="0.15" height="0.75" depth="0.16" material="color: #3b4042; roughness: 0.9;"></a-box>
+          </a-entity>
+        `;
+
+        this.hpFill = el.querySelector('.hp-fill');
+        this.hpRig = el.querySelector('.hp-bar-rig');
+        this.leftArm = el.querySelector('.z-arm-l');
+        this.rightArm = el.querySelector('.z-arm-r');
+        this.leftLeg = el.querySelector('.z-leg-l');
+        this.rightLeg = el.querySelector('.z-leg-r');
+      },
+
+      takeHit(dmg) {
+        if (this.isDying) return;
+        this.data.hp -= dmg;
+        AudioEngine.playGroan();
+
+        const pct = Math.max(0, this.data.hp / this.maxHp);
+        if (this.hpFill) {
+          this.hpFill.setAttribute('scale', `${pct} 1 1`);
+          this.hpFill.setAttribute('position', `${(pct - 1) * 0.33} 0 0.01`);
+          if (pct < 0.35) this.hpFill.setAttribute('material', 'color', '#dd1111');
+          else if (pct < 0.65) this.hpFill.setAttribute('material', 'color', '#ff9900');
+        }
+
+        const dir = this.el.object3D.position.clone().normalize();
+        this.el.object3D.position.addScaledVector(dir, 0.25);
+
+        if (this.data.hp <= 0) {
+          this.triggerDeath();
+        }
+      },
+
+      triggerDeath() {
+        this.isDying = true;
+        if (this.hpRig) this.hpRig.setAttribute('visible', 'false');
+        AudioEngine.playDeathGasp();
+        AudioEngine.playSplatter();
+
+        const gm = document.querySelector('[game-manager]').components['game-manager'];
+        gm.onZombieKilled();
+      },
+
+      tick(t, dt) {
+        const gm = document.querySelector('[game-manager]').components['game-manager'];
+        if (!dt || gm.data.isPaused || gm.data.isGameOver) return;
+
+        const delta = dt / 1000;
+
+        if (this.isDying) {
+          this.deathTimer += delta;
+          const root = this.el.object3D;
+
+          if (root.position.y > -0.6) {
+            root.position.y -= delta * 1.6;
+            root.rotation.x += this.deathPitch * delta * 2.2;
+            root.rotation.z += 0.4 * delta;
+          }
+
+          if (this.leftArm && this.rightArm) {
+            this.leftArm.object3D.rotation.x -= 2.5 * delta;
+            this.rightArm.object3D.rotation.x -= 2.2 * delta;
+          }
+
+          if (this.deathTimer > 1.4) {
+            this.el.remove();
+          }
+          return;
+        }
+
+        this.animTimer += delta * (this.data.speed * 4.2);
+
+        const pos = this.el.object3D.position;
+        const rigPos = document.querySelector('#player-rig').object3D.position;
+        const target = new THREE.Vector3(rigPos.x, 0, rigPos.z);
+        const distToPlayer = pos.distanceTo(target);
+
+        if (distToPlayer < 1.4) {
+          this.attackCooldown -= delta;
+          if (this.attackCooldown <= 0) {
+            gm.damagePlayer(15);
+            this.attackCooldown = 1.1;
+          }
+          return;
+        }
+
+        let dir = target.sub(pos);
+        dir.y = 0;
+        dir.normalize();
+
+        pos.addScaledVector(dir, this.data.speed * delta);
+        this.el.object3D.lookAt(pos.x + dir.x, 0, pos.z + dir.z);
+
+        const sway = Math.sin(this.animTimer);
+        if (this.leftLeg && this.rightLeg) {
+          this.leftLeg.object3D.rotation.x = sway * 0.45;
+          this.rightLeg.object3D.rotation.x = -sway * 0.45;
+        }
+        if (this.leftArm && this.rightArm) {
+          this.leftArm.object3D.rotation.x = 1.3 + (sway * 0.15);
+          this.rightArm.object3D.rotation.x = 1.35 - (sway * 0.15);
+        }
+      }
+    });
+  </script>
+
+  <a-scene game-manager laptop-gamepad-controls cursor="rayOrigin: mouse" background="color: #e5ded2" fog="type: exponential; color: #dfd4be; density: 0.016">
+    
+    <a-entity light="type: ambient; color: #fffaee; intensity: 0.8"></a-entity>
+    <a-entity light="type: directional; color: #fff3db; intensity: 1.4; position: 35 55 20; castShadow: true;"></a-entity>
+
+    <a-sky color="#ecdcc3"></a-sky>
+    <a-sphere position="70 110 40" radius="10" material="color: #ffffff; emissive: #fff2bd; emissiveIntensity: 3; shader: flat;"></a-sphere>
+
+    <a-cylinder position="0 -0.05 0" radius="45" height="0.1" material="color: #d1c5b0; roughness: 0.95; metalness: 0.05;"></a-cylinder>
+
+    <a-box position="0 2.5 -24" width="50" height="5" depth="1.2" material="color: #beb09c; roughness: 0.9;"></a-box>
+    <a-box position="0 2.5 24" width="50" height="5" depth="1.2" material="color: #beb09c; roughness: 0.9;"></a-box>
+    <a-box position="-24 2.5 0" rotation="0 90 0" width="50" height="5" depth="1.2" material="color: #beb09c; roughness: 0.9;"></a-box>
+    <a-box position="24 2.5 0" rotation="0 -90 0" width="50" height="5" depth="1.2" material="color: #beb09c; roughness: 0.9;"></a-box>
+
+    <a-entity id="player-rig" position="0 0 0" wasd-controls="acceleration: 45;">
+      <a-camera id="head-camera" position="0 1.6 0" look-controls="pointerLockEnabled: true">
+        
+        <a-plane id="damage-vignette" position="0 0 -0.2" width="1.5" height="1" 
+                 material="color: #ff0000; opacity: 0.25; transparent: true; shader: flat;" visible="false"></a-plane>
+
+        <a-ring position="0 0 -1" radius-inner="0.005" radius-outer="0.009" 
+                material="color: #1a2228; opacity: 0.75; shader: flat; transparent: true"></a-ring>
+
+        <a-entity id="tactical-hud-panel" position="0 0.44 -1.1" rotation="5 0 0">
+          <a-plane width="1.15" height="0.32" 
+                   material="color: #14181a; opacity: 0.8; transparent: true; roughness: 0.3; metalness: 0.8;"></a-plane>
+          <a-plane position="0 0.155 0.002" width="1.15" height="0.012" material="color: #e5a93c; shader: flat;"></a-plane>
+
+          <a-text value="WAVE" position="-0.46 0.08 0.005" scale="0.16 0.16 0.16" color="#9eacb3" font="monoid" align="center"></a-text>
+          <a-text id="hud-wave-val" value="01" position="-0.46 0.0 0.005" scale="0.38 0.38 0.38" color="#ffbe44" font="monoid" align="center"></a-text>
+
+          <a-text value="COMBAT SCORE" position="-0.18 0.08 0.005" scale="0.16 0.16 0.16" color="#9eacb3" font="monoid" align="center"></a-text>
+          <a-text id="hud-score-val" value="0" position="-0.18 0.0 0.005" scale="0.38 0.38 0.38" color="#ffffff" font="monoid" align="center"></a-text>
+
+          <a-text value="KILLS" position="0.12 0.08 0.005" scale="0.16 0.16 0.16" color="#9eacb3" font="monoid" align="center"></a-text>
+          <a-text id="hud-kills-val" value="0" position="0.12 0.0 0.005" scale="0.38 0.38 0.38" color="#ff5555" font="monoid" align="center"></a-text>
+
+          <a-text value="STREAK" position="0.38 0.08 0.005" scale="0.16 0.16 0.16" color="#9eacb3" font="monoid" align="center"></a-text>
+          <a-text id="hud-mult-val" value="x1" position="0.38 0.0 0.005" scale="0.38 0.38 0.38" color="#8899a6" font="monoid" align="center"></a-text>
+
+          <a-plane position="0 -0.09 0.001" width="1.08" height="0.002" material="color: #2b353a; shader: flat;"></a-plane>
+          <a-text id="hud-gun-val" value="TITAN AR-15 [5.56 NATO]" position="0 -0.115 0.005" scale="0.18 0.18 0.18" color="#ffcc77" font="monoid" align="center"></a-text>
+        </a-entity>
+
+        <a-entity id="player-health-rig" position="0 -0.38 -0.9">
+          <a-plane width="0.54" height="0.065" material="color: #14181a; opacity: 0.85; shader: flat;"></a-plane>
+          <a-plane width="0.52" height="0.05" position="0 0 0.002" material="color: #242e33; shader: flat;"></a-plane>
+          <a-plane id="player-hp-fill" width="0.5" height="0.04" position="0 0 0.005" material="color: #00b359; shader: flat;"></a-plane>
+          <a-text id="player-hp-text" value="100%" position="0 0 0.01" scale="0.22 0.22 0.22" color="#ffffff" align="center" font="monoid"></a-text>
+        </a-entity>
+
+        <a-entity id="pause-screen" visible="false" position="0 0 -0.8">
+          <a-plane width="1.3" height="0.7" material="color: #ffffff; opacity: 0.94; transparent: true"></a-plane>
+          <a-text value="GAME PAUSED\n\n[P] / START TO RESUME" align="center" position="0 0.12 0.01" scale="0.3" color="#101820"></a-text>
+          
+          <a-plane class="clickable" width="0.75" height="0.14" position="0 -0.14 0.02" material="color: #0088cc"
+                   onclick="document.querySelector('[game-manager]').components['game-manager'].restartGame()">
+            <a-text value="RESTART MISSION (R / Y)" align="center" position="0 0 0.01" scale="0.25" color="#ffffff"></a-text>
+          </a-plane>
+        </a-entity>
+
+        <a-entity id="gameover-screen" visible="false" position="0 0 -0.8">
+          <a-plane width="1.3" height="0.75" material="color: #ffffff; opacity: 0.96; transparent: true"></a-plane>
+          <a-text value="OUTPOST OVERRUN" align="center" position="0 0.18 0.01" scale="0.45" color="#cc1111"></a-text>
+          
+          <a-plane class="clickable" width="0.8" height="0.18" position="0 -0.1 0.02" material="color: #cc1111"
+                   onclick="document.querySelector('[game-manager]').components['game-manager'].restartGame()">
+            <a-text value="PLAY AGAIN (R / Y)" align="center" position="0 0 0.01" scale="0.32" color="#ffffff"></a-text>
+          </a-plane>
+        </a-entity>
+
+        <a-entity id="desktop-gun" position="0.22 -0.2 -0.42" rotation="-1 -3 0">
+          <a-box width="0.05" height="0.08" depth="0.36" material="color: #2b3036; roughness: 0.25; metalness: 0.85;"></a-box>
+          <a-box position="0 -0.01 -0.16" width="0.052" height="0.07" depth="0.18" material="color: #1e2124; roughness: 0.7; metalness: 0.2;"></a-box>
+          <a-cylinder position="0 0.005 -0.32" radius="0.016" height="0.28" rotation="90 0 0" material="color: #4b5259; roughness: 0.2; metalness: 0.95;"></a-cylinder>
+          <a-box position="0 -0.09 0.1" rotation="-22 0 0" width="0.042" height="0.14" depth="0.055" material="color: #3f474d;"></a-box>
+          <a-box position="0 -0.1 -0.02" rotation="10 0 0" width="0.038" height="0.16" depth="0.055" material="color: #22262a;"></a-box>
+          <a-ring class="holo-reticle" position="0 0.078 -0.021" radius-inner="0.005" radius-outer="0.009" 
+                  material="color: #00ccff; emissive: #00ccff; emissiveIntensity: 2; shader: flat;"></a-ring>
+          <a-sphere class="muzzle-flash" position="0 0.005 -0.52" radius="0.08" 
+                    material="color: #fffaee; emissive: #ffea88; emissiveIntensity: 5; shader: flat;" visible="false"></a-sphere>
+        </a-entity>
+
+      </a-camera>
+
+      <a-entity id="leftHand" 
+                hand-controls="hand: left; handModelStyle: lowPoly; color: #cad0d4"
+                vr-controller-input="hand: left"></a-entity>
+
+      <a-entity id="rightHand" 
+                hand-controls="hand: right; handModelStyle: lowPoly; color: #cad0d4"
+                vr-controller-input="hand: right">
+        
+        <a-entity id="vr-gun" position="0 -0.03 -0.12" rotation="-15 0 0" visible="false">
+          <a-box width="0.05" height="0.08" depth="0.36" material="color: #2b3036; roughness: 0.25; metalness: 0.85;"></a-box>
+          <a-box position="0 -0.01 -0.16" width="0.052" height="0.07" depth="0.18" material="color: #1e2124; roughness: 0.7; metalness: 0.2;"></a-box>
+          <a-cylinder position="0 0.005 -0.32" radius="0.016" height="0.28" rotation="90 0 0" material="color: #4b5259; roughness: 0.2; metalness: 0.95;"></a-cylinder>
+          <a-cylinder position="0 0.005 -0.47" radius="0.022" height="0.05" rotation="90 0 0" segments-radial="6" material="color: #151719;"></a-cylinder>
+          <a-box position="0 -0.09 0.1" rotation="-22 0 0" width="0.042" height="0.14" depth="0.055" material="color: #3f474d;"></a-box>
+          <a-ring class="holo-reticle" position="0 0.078 -0.021" radius-inner="0.005" radius-outer="0.009" 
+                  material="color: #00ccff; emissive: #00ccff; emissiveIntensity: 2; shader: flat;"></a-ring>
+          <a-sphere class="muzzle-flash" position="0 0.005 -0.52" radius="0.08" 
+                    material="color: #fffaee; emissive: #ffea88; emissiveIntensity: 5; shader: flat;" visible="false"></a-sphere>
+        </a-entity>
+
+      </a-entity>
+
+    </a-entity>
+  </a-scene>
+
+</body>
+</html>
