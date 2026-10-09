@@ -1,0 +1,9 @@
+{
+  "name": "DEADFRONT \u2014 Outlast the Dark",
+  "short_name": "DEADFRONT",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#070b11",
+  "theme_color": "#080d14"
+}
