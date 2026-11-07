@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Deadfront" />
+  <meta name="theme-color" content="#060911" />
+  <meta name="description" content="DEADFRONT: a fast 3D wave shooter. Climb ramps, jump, dash, build loadouts. Plays on phones and desktop." />
+  <title>DEADFRONT</title>
+
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <canvas id="webgl-canvas"></canvas>
+  <div class="crt-overlay"></div>
+  <div id="damage-flash"></div>
+  <div id="dash-flash"></div>
+  <div id="crosshair"><div class="dot"></div></div>
+  <div id="hitmarker"></div>
+  <div id="toast-container"></div>
+  <div id="boot-msg">Loading DEADFRONT...</div>
+
+  <!-- In-game HUD -->
+  <div id="hud">
+    <div class="hud-top">
+      <div class="hud-card vitals-box">
+        <div class="bar-label"><span>Armor</span><span id="shield-val">100</span></div>
+        <div class="bar-bg"><div class="bar-fill fill-shield" id="shield-bar"></div></div>
+        <div class="bar-label"><span>Health</span><span id="hp-val">100</span></div>
+        <div class="bar-bg"><div class="bar-fill fill-hp" id="hp-bar"></div></div>
+      </div>
+      <div class="hud-center">
+        <div class="hud-card wave-badge">
+          <div class="wave-number" id="hud-wave">WAVE 01</div>
+          <div class="wave-sub" id="hud-threats">Hostiles 0</div>
+        </div>
+        <div id="hud-combo"></div>
+        <div id="hud-rage"></div>
+        <div id="boss-bar"><div class="boss-name">Overlord</div><div class="bar-bg"><div class="bar-fill fill-boss" id="boss-fill"></div></div></div>
+      </div>
+      <div id="radar"><canvas id="radar-canvas" width="100" height="100"></canvas></div>
+    </div>
+    <div class="hud-bottom">
+      <div class="hud-card dash-gauge"><span>Dash</span><span id="dash-pips"></span></div>
+      <div class="hud-card ammo-card">
+        <div id="hud-weapon-name">SPARKER</div>
+        <div class="ammo-digits"><span id="hud-ammo-cur">36</span> <span class="ammo-max" id="hud-ammo-max">/ 36</span></div>
+        <div id="reload-indicator">Reloading</div>
+        <div id="hud-swap"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Touch controls -->
+  <div id="mobile-controls-layer">
+    <div id="touch-move-zone"><div id="joystick-base"><div id="joystick-thumb"></div></div></div>
+    <div id="touch-look-zone"></div>
+    <button class="m-btn" id="m-btn-pause">II</button>
+    <button class="m-btn" id="m-btn-fire">FIRE</button>
+    <button class="m-btn" id="m-btn-jump">JUMP</button>
+    <button class="m-btn" id="m-btn-dash">DASH</button>
+    <button class="m-btn" id="m-btn-reload">RELOAD</button>
+    <button class="m-btn" id="m-btn-swap">SWAP</button>
+  </div>
+
+  <!-- Menu -->
+  <div id="menu-overlay">
+    <header class="menu-navbar">
+      <div class="brand-logo">DEAD<span>FRONT</span></div>
+      <nav class="nav-tabs">
+        <button class="nav-btn active" data-tab="tab-play">Play</button>
+        <button class="nav-btn" data-tab="tab-loadout">Loadout</button>
+        <button class="nav-btn" data-tab="tab-settings">Settings</button>
+      </nav>
+      <div class="credits"><span class="coin"></span><strong id="topbar-credits">600</strong></div>
+    </header>
+
+    <div class="menu-viewport scrolls">
+      <section class="menu-page active" id="tab-play">
+        <div class="hero">
+          <div class="hero-left">
+            <p class="kicker">Pick an arena</p>
+            <div class="map-picker" id="map-picker"></div>
+            <h1 id="selected-map-title">DISTRICT 09</h1>
+            <p id="selected-map-desc" class="map-desc"></p>
+          </div>
+          <div class="hero-right">
+            <div class="hud-card brief">
+              <p class="kicker">Your loadout</p>
+              <p id="hero-loadout" class="brief-line"></p>
+              <p id="hero-best" class="brief-sub"></p>
+              <p class="brief-sub">Jump with <b>Space</b> (or JUMP), dash with <b>Shift</b>, swap with <b>Q</b>. Ramps are climbable. Lava hurts. Pads launch you.</p>
+              <p id="ios-tip" class="brief-sub tip">On iPhone: tap Share, then Add to Home Screen, to play full screen.</p>
+            </div>
+            <button class="btn-action" id="btn-start-match">Deploy</button>
+            <button class="btn-ghost fs-btn">Full screen</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="menu-page" id="tab-loadout">
+        <h2 class="page-title">Loadout</h2>
+        <p class="page-sub">Pick a slot, then tap an item. Locked items cost credits. Earn credits by surviving.</p>
+        <div id="slot-row" class="slot-row"></div>
+        <div id="loadout-list"></div>
+        <h3 class="page-sub2">Saved loadouts</h3>
+        <div id="preset-row" class="preset-row"></div>
+      </section>
+
+      <section class="menu-page" id="tab-settings">
+        <h2 class="page-title">Settings</h2>
+        <div class="setting">
+          <label for="set-sens">Look sensitivity <b id="set-sens-val">1.0x</b></label>
+          <input id="set-sens" type="range" min="0.4" max="2.2" step="0.1" value="1" />
+        </div>
+        <div class="setting">
+          <label>Graphics</label>
+          <div class="seg" id="gfx-row">
+            <button data-gfx="auto">Auto</button><button data-gfx="high">High</button><button data-gfx="low">Low (faster)</button>
+          </div>
+          <p class="page-sub">Auto lowers resolution on its own if your phone drops below 40 fps.</p>
+        </div>
+        <div class="setting">
+          <button class="btn-ghost fs-btn">Toggle full screen</button>
+        </div>
+        <div class="setting">
+          <button class="btn-ghost danger" id="btn-reset">Reset progress</button>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Perk choice -->
+  <div id="perk-modal">
+    <p class="kicker">Wave cleared</p>
+    <h2 class="page-title">Choose a perk</h2>
+    <div class="perk-cards" id="perk-cards-container"></div>
+  </div>
+
+  <!-- Pause -->
+  <div id="pause-screen">
+    <h1 class="page-title big">Paused</h1>
+    <div class="stack">
+      <button class="btn-action" id="btn-resume">Resume</button>
+      <button class="btn-ghost fs-btn">Full screen</button>
+      <button class="btn-ghost danger" id="btn-abort">Leave run (keep credits)</button>
+    </div>
+  </div>
+
+  <!-- Game over -->
+  <div id="gameover-screen">
+    <p class="kicker danger-k" id="go-sub">Run over</p>
+    <h1 class="page-title big" id="go-title">You fell</h1>
+    <div class="hud-card go-stats">
+      <div><span>Waves cleared</span><strong id="go-wave">0</strong></div>
+      <div><span>Score</span><strong id="go-score">0</strong></div>
+      <div><span>Credits earned</span><strong id="go-credits" class="green">+0</strong></div>
+      <div><span>Best wave</span><strong id="go-best">0</strong></div>
+    </div>
+    <div class="stack">
+      <button class="btn-action" id="btn-retry">Go again</button>
+      <button class="btn-ghost" id="btn-hub">Back to menu</button>
+    </div>
+  </div>
+
+  <div id="rotate-hint"><div class="rot-icon"></div><p>Turn your phone sideways to play</p></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="js/world.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/ui.js"></script>
+</body>
+</html>
